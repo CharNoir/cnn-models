@@ -9,3 +9,6 @@ print(results)
 
 results = edgetpu_model("https://ultralytics.com/images/bus.jpg")
 print(results)
+
+results = edgetpu_model("https://ultralytics.com/images/bus.jpg")
+print(results)
