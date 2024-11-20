@@ -56,7 +56,7 @@ def draw_objects(draw, objs, labels):
 def main():
   parser = argparse.ArgumentParser(
       formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-  parser.add_argument('-m', '--model', default="yolov8n_integer_quant.tflite",
+  parser.add_argument('-m', '--model', default="yolov8n_full_integer_quant_edgetpu.tflite",
                       help='File path of .tflite file')
   parser.add_argument('-i', '--input', default="image.jpg",
                       help='File path of image to process')
