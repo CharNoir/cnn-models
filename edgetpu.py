@@ -1,4 +1,5 @@
 from ultralytics import YOLO
+import gc
 
 # Validation function
 def validate_model(model_path, dataset_path, image_size):
@@ -10,15 +11,18 @@ def validate_model(model_path, dataset_path, image_size):
     print(f"Mean Recall: {metrics.box.mr}")
     print(f"Speed: {metrics.speed['inference']}")
     
+    del model
+    del metrics
+    
 models = [
-    #["yolov8n_coco_320_edgetpu.tflite", "coco8.yaml", 320],
-    #["yolov8n_coco_640_edgetpu.tflite", "coco8.yaml", 640],
-    #["yolov8s_coco_320_edgetpu.tflite", "coco8.yaml", 320],
-    #["yolov8s_coco_640_edgetpu.tflite", "coco8.yaml", 40],
-    #["yolo11n_coco_320_edgetpu.tflite", "coco8.yaml", 320],  
+    ["yolov8n_coco_320_edgetpu.tflite", "coco8.yaml", 320],
+    ["yolov8n_coco_640_edgetpu.tflite", "coco8.yaml", 640],
+    ["yolov8s_coco_320_edgetpu.tflite", "coco8.yaml", 320],
+    ["yolov8s_coco_640_edgetpu.tflite", "coco8.yaml", 40],
+    ["yolo11n_coco_320_edgetpu.tflite", "coco8.yaml", 320],  
     ["yolo11n_coco_640_edgetpu.tflite", "coco8.yaml", 640],
-    #["yolo11s_coco_320_edgetpu.tflite", "coco8.yaml", 320],
-    #["yolo11s_coco_640_edgetpu.tflite", "coco8.yaml", 640],
+    ["yolo11s_coco_320_edgetpu.tflite", "coco8.yaml", 320],
+    ["yolo11s_coco_640_edgetpu.tflite", "coco8.yaml", 640],
 ]
 # Run validation
 for model in models:
@@ -26,3 +30,4 @@ for model in models:
     print(model[0])
     validate_model(model[0], model[1], model[2])
     print()
+    gc.collect()
