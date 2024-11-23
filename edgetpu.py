@@ -1,24 +1,4 @@
-# Since I cannot directly execute YOLO or Roboflow code in this environment, I will provide you with the code to run locally.
-
-# Step 1: Ensure you have the necessary libraries installed
-# pip install ultralytics roboflow numpy
-
-# Step 2: Code to perform validation on the COCO dataset with YOLOv8n model for EdgeTPU
-
 from ultralytics import YOLO
-from roboflow import Roboflow
-import os
-import time
-
-# Download the COCO dataset
-#rf = Roboflow(api_key="29BoJlnW33DXMTyQnnLP")
-#project = rf.workspace("microsoft").project("coco")
-#version = project.version(34)
-#dataset = version.download("yolov8")
-#dataset_path = os.path.join(dataset.location, "data.yaml")
-
-# Load the EdgeTPU optimized model
-edgetpu_model = YOLO("yolov8n.pt")
 
 # Validation function
 def validate_model(model_path, dataset_path, image_size):
