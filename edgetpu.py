@@ -14,11 +14,11 @@ models = [
     ["yolov8n_coco_320_edgetpu.tflite", "coco8.yaml", 320],
     ["yolov8n_coco_640_edgetpu.tflite", "coco8.yaml", 640],
     ["yolov8s_coco_320_edgetpu.tflite", "coco8.yaml", 320],
-    ["yolov8s_coco_640_edgetpu.tflite", "coco8.yaml", 640],
+    #["yolov8s_coco_640_edgetpu.tflite", "coco8.yaml", 40],
     ["yolo11n_coco_320_edgetpu.tflite", "coco8.yaml", 320],  
     ["yolo11n_coco_640_edgetpu.tflite", "coco8.yaml", 640],
     ["yolo11s_coco_320_edgetpu.tflite", "coco8.yaml", 320],
-    ["yolo11s_coco_640_edgetpu.tflite", "coco8.yaml", 640],
+    #["yolo11s_coco_640_edgetpu.tflite", "coco8.yaml", 640],
 ]
 # Run validation
 for model in models:
