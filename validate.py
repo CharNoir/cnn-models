@@ -34,18 +34,16 @@ def validate_model(model_path, dataset_path, image_size, output_file):
             f.write(error_message)
         exit(1)
 
-#if __name__ == "__main__":
+if __name__ == "__main__":
     # Set up argument parser
-    #parser = argparse.ArgumentParser(description="Validate YOLO model on a dataset")
-    #parser.add_argument("--model", type=str, required=True, help="Path to the YOLO model file")
-    #parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset YAML file")
-    #parser.add_argument("--imgsz", type=int, required=True, help="Image size for validation")
-    #parser.add_argument("--output", type=str, required=False, default="validation_results.txt", help="Path to the output file")
+    parser = argparse.ArgumentParser(description="Validate YOLO model on a dataset")
+    parser.add_argument("--model", type=str, required=True, help="Path to the YOLO model file")
+    parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset YAML file")
+    parser.add_argument("--imgsz", type=int, required=True, help="Image size for validation")
+    parser.add_argument("--output", type=str, required=False, default="validation_results.txt", help="Path to the output file")
 
     # Parse arguments
-    #args = parser.parse_args()
+    args = parser.parse_args()
 
     # Call the validation function
-    #validate_model(args.model, args.dataset, args.imgsz, args.output)
-
-validate_model("yolov8n.pt", "D:\\Files\\GitHub\\cnn-models\\validation-datasets\\coco\\coco.yaml", 640, "validation_results.txt")
+    validate_model(args.model, args.dataset, args.imgsz, args.output)
