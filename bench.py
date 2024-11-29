@@ -3,40 +3,14 @@ from ultralytics import YOLO
 from ultralytics.utils.benchmarks import benchmark
 
 def bench_model(model_path, dataset_path, image_size, output_file, device):
-    try:
-        # Load the YOLO model
-        model = YOLO(model_path, task='detect')
+    # Load the YOLO model
+    model = YOLO(model_path, task='detect')
 
-        # Run validation
-        if device:
-            metrics = benchmark(model=model_path, data=dataset_path, imgsz=image_size, device=device)
-        else:
-            metrics =  benchmark(model=model_path, data=dataset_path, imgsz=image_size)
-
-        # Format results
-        results = (
-            f"Model: {model_path}\n"
-            f"Dataset: {dataset_path}\n"
-            f"mAP50-95: {metrics.box.map:.4f}\n"
-            f"F1 score: {(2*metrics.box.mp*metrics.box.mr / (metrics.box.mp+metrics.box.mr)):.4f}\n"
-            f"Mean Precision: {metrics.box.mp:.4f}\n"
-            f"Mean Recall: {metrics.box.mr:.4f}\n"
-            f"Speed (Inference): {metrics.speed['inference']:.2f} ms/image\n"
-            "---------------------------------------------\n"
-        )
-
-        # Print results to console
-        print(results)
-
-        # Append results to the output file
-        with open(output_file, "a") as f:
-            f.write(results)
-    except Exception as e:
-        error_message = f"Error during validation for model {model_path}: {e}\n"
-        print(error_message)
-        with open(output_file, "a") as f:
-            f.write(error_message)
-        exit(1)
+    # Run validation
+    if device:
+        benchmark(model=model_path, data=dataset_path, imgsz=image_size, device=device)
+    else:
+        benchmark(model=model_path, data=dataset_path, imgsz=image_size)
 
 if __name__ == "__main__":
     # Set up argument parser
