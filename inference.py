@@ -167,7 +167,7 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
         pred_scores = [pred["score"] for pred in pred_boxes]
 
         # Calculate True Positives and False Positives
-        tp, fp = calculate_tp_fp(gt_boxes, pred_boxes, iou_threshold=0.5)
+        tp, fp = calculate_tp_fp(gt_boxes, pred_boxes, iou_threshold=0.75)
         total_tp += tp
         total_fp += fp
 
@@ -185,7 +185,7 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
 
     print(f"Total True Positives (TP): {total_tp}")
     print(f"Total False Positives (FP): {total_fp}")
-    print(f"Precision: {total_fp/(total_tp+total_fp)}")
+    print(f"Precision: {total_tp/(total_tp+total_fp)}")
     print(f"Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
     print(f"Average Inference Time: {1000 * total_time / total_images:.1f} milliseconds per image")
 
