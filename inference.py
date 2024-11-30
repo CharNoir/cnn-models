@@ -130,7 +130,7 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
         # Load and preprocess the image
         image = Image.open(image_path).convert("RGB")
         size = common.input_size(interpreter)
-        image_resized = image.resize(size, Image.ANTIALIAS)
+        image_resized = image.resize(size, Image.LANCZOS)
 
         # Load ground truth annotations
         gt_boxes = load_annotations(annotation_path, image.size)
