@@ -158,8 +158,14 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
         gt_boxes = load_annotations(annotation_path, image.size)
 
         # Run inference
-        pred_boxes, pred_scores, inference_time = run_inference(interpreter, image_resized)
+        pred_boxes, pred_scores, inference_time = run_inference(interpreter, image_resized, threshold=0.5)
         total_time += inference_time
+
+        # Debugging: Print predictions and ground truths
+        print(f"Image: {image_file}")
+        print(f"Ground Truths: {gt_boxes}")
+        print(f"Predictions: {pred_boxes}")
+        print(f"Scores: {pred_scores}")
 
         # Calculate metrics across IoU thresholds
         precision, recall, mAP50, mAP50_95 = calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds)
@@ -179,6 +185,7 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
 
     print(f"Box(P): {mean_precision:.4f}, Box(R): {mean_recall:.4f}, Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
     print(f"Average Inference Time: {1000 * total_time / total_images:.1f} milliseconds per image")
+
 
 
 if __name__ == "__main__":
