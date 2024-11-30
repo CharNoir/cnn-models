@@ -26,20 +26,22 @@ def load_annotations(annotation_path, image_shape):
     return ground_truths
 
 def run_inference(interpreter, image, threshold=0.5):
-    """Perform inference and return detected boxes and scores."""
+    """Perform inference and return detected boxes, scores, and inference time."""
     common.set_input(interpreter, image)
     start_time = time.time()
     interpreter.invoke()
     inference_time = time.time() - start_time
     detections = detect.get_objects(interpreter, threshold)
     results = []
+    scores = []
     for det in detections:
         results.append({
             "id": det.id,
             "bbox": (det.bbox.xmin, det.bbox.ymin, det.bbox.xmax, det.bbox.ymax),
             "score": det.score,
         })
-    return results, inference_time
+        scores.append(det.score)
+    return results, scores, inference_time
 
 def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
     """Calculate precision, recall, and average precision."""
