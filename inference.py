@@ -57,16 +57,38 @@ def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
 
     # Calculate IoU
     ious = compute_iou_matrix(gt_array, pred_array)
-    matches = ious > iou_threshold
 
-    # Assign matches
-    tp = np.sum(matches, axis=1) > 0
-    fp = ~tp
-    precision = precision_score(tp, fp, zero_division=1)
-    recall = recall_score(tp, fp, zero_division=1)
-    ap = average_precision_score(tp, pred_scores)
+    # Match predictions to ground truths
+    tp = []
+    y_true = []
+    y_score = []
+    for i, gt in enumerate(gt_array):
+        matched = False
+        for j, pred in enumerate(pred_array):
+            if ious[i, j] > iou_threshold:
+                matched = True
+                y_true.append(1)  # Ground truth matched
+                y_score.append(pred_scores[j])
+                tp.append(True)
+                break
+        if not matched:
+            y_true.append(1)  # Unmatched ground truth
+            y_score.append(0)
+
+    # Add unmatched predictions
+    for j, pred in enumerate(pred_array):
+        if not any(ious[:, j] > iou_threshold):
+            y_true.append(0)  # False positive prediction
+            y_score.append(pred_scores[j])
+            tp.append(False)
+
+    # Calculate precision, recall, and AP
+    precision = np.sum(tp) / len(tp)
+    recall = np.sum(tp) / len(gt_boxes)
+    ap = average_precision_score(y_true, y_score)
 
     return precision, recall, ap
+
 
 def compute_iou_matrix(gt_boxes, pred_boxes):
     """Compute IoU matrix for ground truth and predicted boxes."""
