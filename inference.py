@@ -133,7 +133,7 @@ def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds, pr_thre
     return pr_precision, pr_recall, mAP50, mAP50_95
 
 
-def process_dataset(dataset_path, model_path, labels_path, iou_thresholds, pr_threshold=0.95):
+def process_dataset(dataset_path, model_path, labels_path, iou_thresholds, pr_threshold):
     """Run inference on a dataset and calculate metrics."""
     # Load the model
     interpreter = edgetpu.make_interpreter(model_path)
@@ -185,7 +185,7 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds, pr_th
     mean_mAP50 = np.mean(all_mAP50)
     mean_mAP50_95 = np.mean(all_mAP50_95)
 
-    print(f"Box(P)@0.95: {mean_precision:.4f}, Box(R)@0.95: {mean_recall:.4f}, Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
+    print(f"Box(P)@{pr_threshold:.2f}: {mean_precision:.4f}, Box(R)@{pr_threshold:.2f}: {mean_recall:.4f}, Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
     print(f"Average Inference Time: {1000 * total_time / total_images:.1f} milliseconds per image")
 
 
@@ -197,4 +197,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
-    process_dataset(args.dataset, args.model, args.labels, iou_thresholds, pr_threshold=0.95)
+    process_dataset(args.dataset, args.model, args.labels, iou_thresholds, pr_threshold=0.5)
