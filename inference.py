@@ -43,53 +43,6 @@ def run_inference(interpreter, image, threshold=0.5):
         scores.append(det.score)
     return results, scores, inference_time
 
-def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
-    """Calculate precision, recall, and average precision."""
-    if len(gt_boxes) == 0 and len(pred_boxes) == 0:
-        return 1.0, 1.0, 1.0  # Perfect match
-    if len(gt_boxes) == 0 or len(pred_boxes) == 0:
-        return 0.0, 0.0, 0.0  # No match
-
-    # Convert to NumPy arrays for IoU calculation
-    gt_array = np.array([box[1:] for box in gt_boxes])
-    pred_array = np.array([box["bbox"] for box in pred_boxes])
-    pred_scores = np.array(pred_scores)
-
-    # Calculate IoU
-    ious = compute_iou_matrix(gt_array, pred_array)
-
-    # Match predictions to ground truths
-    tp = []
-    y_true = []
-    y_score = []
-    for i, gt in enumerate(gt_array):
-        matched = False
-        for j, pred in enumerate(pred_array):
-            if ious[i, j] > iou_threshold:
-                matched = True
-                y_true.append(1)  # Ground truth matched
-                y_score.append(pred_scores[j])
-                tp.append(True)
-                break
-        if not matched:
-            y_true.append(1)  # Unmatched ground truth
-            y_score.append(0)
-
-    # Add unmatched predictions
-    for j, pred in enumerate(pred_array):
-        if not any(ious[:, j] > iou_threshold):
-            y_true.append(0)  # False positive prediction
-            y_score.append(pred_scores[j])
-            tp.append(False)
-
-    # Calculate precision, recall, and AP
-    precision = np.sum(tp) / len(tp)
-    recall = np.sum(tp) / len(gt_boxes)
-    ap = average_precision_score(y_true, y_score)
-
-    return precision, recall, ap
-
-
 def compute_iou_matrix(gt_boxes, pred_boxes):
     """Compute IoU matrix for ground truth and predicted boxes."""
     iou_matrix = np.zeros((len(gt_boxes), len(pred_boxes)))
@@ -109,7 +62,67 @@ def compute_iou(box1, box2):
     box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
     return inter_area / (box1_area + box2_area - inter_area)
 
-def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
+def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
+    """Calculate precision, recall, and AP across multiple IoU thresholds."""
+    precisions = []
+    recalls = []
+    aps = []
+
+    for iou_threshold in iou_thresholds:
+        precision, recall, ap = calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold)
+        precisions.append(precision)
+        recalls.append(recall)
+        aps.append(ap)
+
+    # Return averages across IoU thresholds
+    return np.mean(precisions), np.mean(recalls), np.mean(aps)
+
+def calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
+    """Calculate precision, recall, and AP for a single IoU threshold."""
+    if len(gt_boxes) == 0 and len(pred_boxes) == 0:
+        return 1.0, 1.0, 1.0  # Perfect match
+    if len(gt_boxes) == 0 or len(pred_boxes) == 0:
+        return 0.0, 0.0, 0.0  # No match
+
+    gt_array = np.array([box[1:] for box in gt_boxes])
+    pred_array = np.array([box["bbox"] for box in pred_boxes])
+    pred_scores = np.array(pred_scores)
+
+    # Calculate IoU
+    ious = compute_iou_matrix(gt_array, pred_array)
+
+    # Match predictions to ground truths
+    tp = []
+    y_true = []
+    y_score = []
+    assigned_gt = set()
+
+    for j, pred in enumerate(pred_array):
+        matched = False
+        for i, gt in enumerate(gt_array):
+            if i in assigned_gt:
+                continue  # Skip already matched ground truths
+            if ious[i, j] >= iou_threshold:
+                matched = True
+                assigned_gt.add(i)
+                break
+
+        y_true.append(1 if matched else 0)
+        y_score.append(pred_scores[j])
+        tp.append(matched)
+
+    # Add unmatched ground truths as false negatives
+    y_true.extend([1] * (len(gt_boxes) - len(assigned_gt)))
+    y_score.extend([0] * (len(gt_boxes) - len(assigned_gt)))
+
+    # Calculate precision, recall, and AP
+    precision = np.sum(tp) / len(tp)
+    recall = np.sum(tp) / len(gt_boxes)
+    ap = average_precision_score(y_true, y_score)
+
+    return precision, recall, ap
+
+def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
     """Run inference on a dataset and calculate metrics."""
     # Load the model
     interpreter = edgetpu.make_interpreter(model_path)
@@ -122,9 +135,11 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
     all_aps = []
     total_time = 0.0
 
-    images = os.listdir(os.path.join(dataset_path, "images"))
+    images = [f for f in os.listdir(os.path.join(dataset_path, "images")) if f.endswith(('.jpg', '.jpeg', '.png'))]
     
     counter = 0
+    total_images = len(images)
+
     # Process each image
     for image_file in images:
         image_path = os.path.join(dataset_path, "images", image_file)
@@ -142,15 +157,15 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
         pred_boxes, pred_scores, inference_time = run_inference(interpreter, image_resized)
         total_time += inference_time
 
-        # Calculate metrics
-        precision, recall, ap = calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_threshold)
+        # Calculate metrics across IoU thresholds
+        precision, recall, ap = calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds)
         all_precisions.append(precision)
         all_recalls.append(recall)
         all_aps.append(ap)
         
         counter += 1
-        if (counter % 100 == 0):
-            print(f"{counter} Imgaes has been processed [{counter/len(images)}]")
+        if (counter % 100 == 0 or counter == total_images):
+            print(f"{counter} Images have been processed [{100 * counter / total_images:.1f}%]")
 
     # Calculate mean metrics
     mean_precision = np.mean(all_precisions)
@@ -158,7 +173,7 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
     map50_95 = np.mean(all_aps)
 
     print(f"Precision: {mean_precision:.4f}, Recall: {mean_recall:.4f}, mAP@[50-95]: {map50_95:.4f}")
-    print(f"Average Inference Time: {1000 * total_time / len(all_precisions):.4f} seconds per image")
+    print(f"Average Inference Time: {1000 * total_time / len(all_precisions):.1f} milliseconds per image")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run YOLO inference and evaluate metrics on a dataset")
@@ -167,4 +182,6 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset folder in YOLO format")
     args = parser.parse_args()
 
-    process_dataset(args.dataset, args.model, args.labels)
+    iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
+    process_dataset(args.dataset, args.model, args.labels, iou_thresholds)
+
