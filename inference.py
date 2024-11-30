@@ -30,7 +30,7 @@ def run_inference(interpreter, image, threshold=0.5):
     common.set_input(interpreter, image)
     start_time = time.time()
     interpreter.invoke()
-    inference_time = time.time() - start_time
+    inference_time = (time.time() - start_time) * 1000  # Convert to milliseconds
     detections = detect.get_objects(interpreter, threshold)
     results = []
     scores = []
@@ -42,6 +42,7 @@ def run_inference(interpreter, image, threshold=0.5):
         })
         scores.append(det.score)
     return results, scores, inference_time
+
 
 def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
     """Calculate precision, recall, and average precision."""
@@ -109,11 +110,15 @@ def compute_iou(box1, box2):
     box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
     return inter_area / (box1_area + box2_area - inter_area)
 
-def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
-    """Run inference on a dataset and calculate metrics."""
-    # Load the model
+def process_dataset(data_config, model_path, labels_path, split="test", iou_threshold=0.5):
+    """Run inference on a dataset split and calculate metrics."""
     interpreter = edgetpu.make_interpreter(model_path)
     interpreter.allocate_tensors()
+
+    with open(data_config, "r") as f:
+        data = yaml.safe_load(f)
+    split_images = os.path.join(data[split], "images")
+    split_labels = os.path.join(data[split], "labels")
 
     label_map = dataset.read_label_file(labels_path)
 
@@ -122,36 +127,41 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
     all_aps = []
     total_time = 0.0
 
-    # Process each image
-    for image_file in os.listdir(os.path.join(dataset_path, "images")):
-        image_path = os.path.join(dataset_path, "images", image_file)
-        annotation_path = os.path.join(dataset_path, "labels", image_file.replace(".jpg", ".txt"))
+    # List all image files
+    image_files = os.listdir(split_images)
+    total_images = len(image_files)
 
-        # Load and preprocess the image
+    for idx, image_file in enumerate(image_files):
+        image_path = os.path.join(split_images, image_file)
+        annotation_path = os.path.join(split_labels, image_file.replace(".jpg", ".txt"))
+
         image = Image.open(image_path).convert("RGB")
         size = common.input_size(interpreter)
         image_resized = image.resize(size, Image.LANCZOS)
 
-        # Load ground truth annotations
         gt_boxes = load_annotations(annotation_path, image.size)
 
-        # Run inference
         pred_boxes, pred_scores, inference_time = run_inference(interpreter, image_resized)
         total_time += inference_time
 
-        # Calculate metrics
         precision, recall, ap = calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_threshold)
         all_precisions.append(precision)
         all_recalls.append(recall)
         all_aps.append(ap)
 
-    # Calculate mean metrics
+        # Show progress every 100 images
+        if (idx + 1) % 100 == 0 or (idx + 1) == total_images:
+            progress = (idx + 1) / total_images * 100
+            print(f"\rProcessed {idx + 1}/{total_images} images ({progress:.2f}%)", end="")
+
+    print()  # Move to the next line after progress bar
     mean_precision = np.mean(all_precisions)
     mean_recall = np.mean(all_recalls)
     map50_95 = np.mean(all_aps)
 
+    print(f"Split: {split}")
     print(f"Precision: {mean_precision:.4f}, Recall: {mean_recall:.4f}, mAP@[50-95]: {map50_95:.4f}")
-    print(f"Average Inference Time: {total_time / len(all_precisions):.4f} seconds per image")
+    print(f"Average Inference Time: {total_time / total_images:.2f} ms per image")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run YOLO inference and evaluate metrics on a dataset")
