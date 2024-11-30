@@ -62,6 +62,52 @@ def compute_iou(box1, box2):
     box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
     return inter_area / (box1_area + box2_area - inter_area)
 
+def calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
+    """Calculate precision, recall, and AP for a single IoU threshold."""
+    if len(gt_boxes) == 0 and len(pred_boxes) == 0:
+        return 1.0, 1.0, 1.0  # Perfect match
+    if len(gt_boxes) == 0 or len(pred_boxes) == 0:
+        return 0.0, 0.0, 0.0  # No match
+
+    gt_array = np.array([box[1:] for box in gt_boxes])
+    pred_array = np.array([box["bbox"] for box in pred_boxes])
+    pred_scores = np.array(pred_scores)
+
+    # Calculate IoU
+    ious = compute_iou_matrix(gt_array, pred_array)
+
+    # Match predictions to ground truths
+    tp = []
+    y_true = []
+    y_score = []
+    assigned_gt = set()
+
+    for j, pred in enumerate(pred_array):
+        matched = False
+        for i, gt in enumerate(gt_array):
+            if i in assigned_gt:
+                continue  # Skip already matched ground truths
+            if ious[i, j] >= iou_threshold:
+                matched = True
+                assigned_gt.add(i)
+                break
+
+        y_true.append(1 if matched else 0)
+        y_score.append(pred_scores[j])
+        tp.append(matched)
+
+    # Add unmatched ground truths as false negatives
+    y_true.extend([1] * (len(gt_boxes) - len(assigned_gt)))
+    y_score.extend([0] * (len(gt_boxes) - len(assigned_gt)))
+
+    # Calculate precision, recall, and AP
+    precision = np.sum(tp) / len(tp)
+    recall = np.sum(tp) / len(gt_boxes)
+    ap = average_precision_score(y_true, y_score)
+
+    return precision, recall, ap
+
+
 def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds, pr_threshold=0.95):
     """Calculate precision, recall, and mAP across multiple IoU thresholds."""
     precisions = []
