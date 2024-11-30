@@ -7,7 +7,8 @@ from pycoral.utils import dataset
 from pycoral.adapters import common
 from pycoral.adapters import detect
 from PIL import Image
-from sklearn.metrics import precision_score, recall_score, average_precision_score
+from sklearn.metrics import average_precision_score
+
 
 def load_annotations(annotation_path, image_shape):
     """Load YOLO annotations for ground truth boxes."""
@@ -24,6 +25,7 @@ def load_annotations(annotation_path, image_shape):
             y_max = (y_center + height / 2) * image_shape[0]
             ground_truths.append((class_id, x_min, y_min, x_max, y_max))
     return ground_truths
+
 
 def run_inference(interpreter, image, threshold=0.5):
     """Perform inference and return detected boxes, scores, and inference time."""
@@ -43,13 +45,6 @@ def run_inference(interpreter, image, threshold=0.5):
         scores.append(det.score)
     return results, scores, inference_time
 
-def compute_iou_matrix(gt_boxes, pred_boxes):
-    """Compute IoU matrix for ground truth and predicted boxes."""
-    iou_matrix = np.zeros((len(gt_boxes), len(pred_boxes)))
-    for i, gt in enumerate(gt_boxes):
-        for j, pred in enumerate(pred_boxes):
-            iou_matrix[i, j] = compute_iou(gt, pred)
-    return iou_matrix
 
 def compute_iou(box1, box2):
     """Compute IoU for two boxes."""
@@ -61,6 +56,16 @@ def compute_iou(box1, box2):
     box1_area = (box1[2] - box1[0]) * (box1[3] - box1[1])
     box2_area = (box2[2] - box2[0]) * (box2[3] - box2[1])
     return inter_area / (box1_area + box2_area - inter_area)
+
+
+def compute_iou_matrix(gt_boxes, pred_boxes):
+    """Compute IoU matrix for ground truth and predicted boxes."""
+    iou_matrix = np.zeros((len(gt_boxes), len(pred_boxes)))
+    for i, gt in enumerate(gt_boxes):
+        for j, pred in enumerate(pred_boxes):
+            iou_matrix[i, j] = compute_iou(gt, pred)
+    return iou_matrix
+
 
 def calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
     """Calculate precision, recall, and AP for a single IoU threshold."""
@@ -108,7 +113,7 @@ def calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold=
     return precision, recall, ap
 
 
-def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds, pr_threshold=0.95):
+def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds, pr_threshold):
     """Calculate precision, recall, and mAP across multiple IoU thresholds."""
     precisions = []
     recalls = []
