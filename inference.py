@@ -28,22 +28,20 @@ def load_annotations(annotation_path, image_shape):
 
 
 def run_inference(interpreter, image, threshold=0.5):
-    """Perform inference and return detected boxes, scores, and inference time."""
+    """Perform inference and return detected boxes and inference time."""
     common.set_input(interpreter, image)
     start_time = time.time()
     interpreter.invoke()
     inference_time = time.time() - start_time
     detections = detect.get_objects(interpreter, threshold)
     results = []
-    scores = []
     for det in detections:
         results.append({
             "id": det.id,
             "bbox": (det.bbox.xmin, det.bbox.ymin, det.bbox.xmax, det.bbox.ymax),
             "score": det.score,
         })
-        scores.append(det.score)
-    return results, scores, inference_time
+    return results, inference_time
 
 
 def compute_iou(box1, box2):
@@ -63,94 +61,88 @@ def compute_iou_matrix(gt_boxes, pred_boxes):
     iou_matrix = np.zeros((len(gt_boxes), len(pred_boxes)))
     for i, gt in enumerate(gt_boxes):
         for j, pred in enumerate(pred_boxes):
-            iou_matrix[i, j] = compute_iou(gt, pred)
+            iou_matrix[i, j] = compute_iou(gt, pred["bbox"])
     return iou_matrix
 
 
-def calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
-    """Calculate precision, recall, and AP for a single IoU threshold."""
-    if len(gt_boxes) == 0 and len(pred_boxes) == 0:
-        return 1.0, 1.0, 1.0  # Perfect match
-    if len(gt_boxes) == 0 or len(pred_boxes) == 0:
-        return 0.0, 0.0, 0.0  # No match
+def calculate_tp_fp(gt_boxes, pred_boxes, iou_threshold=0.5):
+    """Calculate True Positives (TP) and False Positives (FP) for a fixed IoU threshold."""
+    tp = 0
+    fp = 0
+    assigned_gt = set()  # Track matched ground truths
 
-    gt_array = np.array([box[1:] for box in gt_boxes])
-    pred_array = np.array([box["bbox"] for box in pred_boxes])
-    pred_scores = np.array(pred_scores)
-
-    # Calculate IoU
-    ious = compute_iou_matrix(gt_array, pred_array)
-
-    # Match predictions to ground truths
-    tp = []
-    y_true = []
-    y_score = []
-    assigned_gt = set()
-
-    for j, pred in enumerate(pred_array):
+    for pred in pred_boxes:
         matched = False
-        for i, gt in enumerate(gt_array):
+        for i, gt in enumerate(gt_boxes):
             if i in assigned_gt:
                 continue  # Skip already matched ground truths
-            if ious[i, j] >= iou_threshold:
+            iou = compute_iou(gt[1:], pred["bbox"])
+            if iou >= iou_threshold:
                 matched = True
                 assigned_gt.add(i)
                 break
 
-        y_true.append(1 if matched else 0)
-        y_score.append(pred_scores[j])
-        tp.append(matched)
+        if matched:
+            tp += 1
+        else:
+            fp += 1
 
-    # Add unmatched ground truths as false negatives
-    y_true.extend([1] * (len(gt_boxes) - len(assigned_gt)))
-    y_score.extend([0] * (len(gt_boxes) - len(assigned_gt)))
-
-    # Calculate precision, recall, and AP
-    precision = np.sum(tp) / len(tp)
-    recall = np.sum(tp) / len(gt_boxes)
-    ap = average_precision_score(y_true, y_score)
-
-    return precision, recall, ap
+    return tp, fp
 
 
-def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds, pr_threshold):
-    """Calculate precision, recall, and mAP across multiple IoU thresholds."""
-    precisions = []
-    recalls = []
+def calculate_mAP(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
+    """Calculate mAP across multiple IoU thresholds."""
     aps = []
-    pr_precision, pr_recall = 0, 0  # To store P and R for the specified IoU threshold
 
     for iou_threshold in iou_thresholds:
-        precision, recall, ap = calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold)
-        precisions.append(precision)
-        recalls.append(recall)
+        # Match predictions to ground truths
+        tp = []
+        y_true = []
+        y_score = []
+        assigned_gt = set()
+
+        for j, pred in enumerate(pred_boxes):
+            matched = False
+            for i, gt in enumerate(gt_boxes):
+                if i in assigned_gt:
+                    continue  # Skip already matched ground truths
+                iou = compute_iou(gt[1:], pred["bbox"])
+                if iou >= iou_threshold:
+                    matched = True
+                    assigned_gt.add(i)
+                    break
+
+            y_true.append(1 if matched else 0)
+            y_score.append(pred_scores[j])
+            tp.append(matched)
+
+        # Add unmatched ground truths as false negatives
+        y_true.extend([1] * (len(gt_boxes) - len(assigned_gt)))
+        y_score.extend([0] * (len(gt_boxes) - len(assigned_gt)))
+
+        # Calculate AP for the current IoU threshold
+        ap = average_precision_score(y_true, y_score)
         aps.append(ap)
 
-        # Capture P and R for the specified IoU threshold
-        if iou_threshold == pr_threshold:
-            pr_precision = precision
-            pr_recall = recall
-
-    # For mAP@50 and mAP@[50-95]
-    mAP50 = aps[0]  # The first threshold corresponds to IoU=0.50
+    # Calculate mAP
+    mAP50 = aps[0]  # IoU = 0.5
     mAP50_95 = np.mean(aps)
+    return mAP50, mAP50_95
 
-    return pr_precision, pr_recall, mAP50, mAP50_95
 
-
-def process_dataset(dataset_path, model_path, labels_path, iou_thresholds, pr_threshold):
-    """Run inference on a dataset and calculate metrics."""
+def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
+    """Run inference on a dataset and calculate TP, FP, and mAP."""
     # Load the model
     interpreter = edgetpu.make_interpreter(model_path)
     interpreter.allocate_tensors()
 
     label_map = dataset.read_label_file(labels_path)
 
-    all_precisions = []
-    all_recalls = []
+    total_tp = 0
+    total_fp = 0
+    total_time = 0.0
     all_mAP50 = []
     all_mAP50_95 = []
-    total_time = 0.0
 
     images = [f for f in os.listdir(os.path.join(dataset_path, "images")) if f.endswith(('.jpg', '.jpeg', '.png'))]
     total_images = len(images)
@@ -169,28 +161,32 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds, pr_th
         gt_boxes = load_annotations(annotation_path, image.size)
 
         # Run inference
-        pred_boxes, pred_scores, inference_time = run_inference(interpreter, image_resized)
+        pred_boxes, inference_time = run_inference(interpreter, image_resized)
         total_time += inference_time
 
-        # Calculate metrics across IoU thresholds
-        pr_precision, pr_recall, mAP50, mAP50_95 = calculate_metrics(
-            gt_boxes, pred_boxes, pred_scores, iou_thresholds, pr_threshold=pr_threshold
-        )
-        all_precisions.append(pr_precision)
-        all_recalls.append(pr_recall)
+        pred_scores = [pred["score"] for pred in pred_boxes]
+
+        # Calculate True Positives and False Positives
+        tp, fp = calculate_tp_fp(gt_boxes, pred_boxes, iou_threshold=0.5)
+        total_tp += tp
+        total_fp += fp
+
+        # Calculate mAP
+        mAP50, mAP50_95 = calculate_mAP(gt_boxes, pred_boxes, pred_scores, iou_thresholds)
         all_mAP50.append(mAP50)
         all_mAP50_95.append(mAP50_95)
 
         if (idx + 1) % 100 == 0 or (idx + 1) == total_images:
             print(f"Processed {idx + 1}/{total_images} images [{100 * (idx + 1) / total_images:.1f}%]")
 
-    # Calculate overall metrics
-    mean_precision = np.mean(all_precisions)
-    mean_recall = np.mean(all_recalls)
+    # Calculate overall mAP
     mean_mAP50 = np.mean(all_mAP50)
     mean_mAP50_95 = np.mean(all_mAP50_95)
 
-    print(f"Box(P)@{pr_threshold:.2f}: {mean_precision:.4f}, Box(R)@{pr_threshold:.2f}: {mean_recall:.4f}, Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
+    print(f"Total True Positives (TP): {total_tp}")
+    print(f"Total False Positives (FP): {total_fp}")
+    print(f"Precision: {total_fp/(total_tp+total_fp)}")
+    print(f"Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
     print(f"Average Inference Time: {1000 * total_time / total_images:.1f} milliseconds per image")
 
 
@@ -202,4 +198,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
-    process_dataset(args.dataset, args.model, args.labels, iou_thresholds, pr_threshold=0.5)
+    process_dataset(args.dataset, args.model, args.labels, iou_thresholds)
