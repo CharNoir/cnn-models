@@ -198,15 +198,3 @@ if __name__ == "__main__":
 
     iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
     process_dataset(args.dataset, args.model, args.labels, iou_thresholds, pr_threshold=0.95)
-
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run YOLO inference and evaluate metrics on a dataset")
-    parser.add_argument("--model", type=str, required=True, help="Path to the TFLite model file")
-    parser.add_argument("--labels", type=str, required=True, help="Path to the labels txt file")
-    parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset folder in YOLO format")
-    args = parser.parse_args()
-
-    iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
-    process_dataset(args.dataset, args.model, args.labels, iou_thresholds)
