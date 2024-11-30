@@ -63,7 +63,7 @@ def compute_iou(box1, box2):
     return inter_area / (box1_area + box2_area - inter_area)
 
 def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
-    """Calculate precision, recall, and AP across multiple IoU thresholds."""
+    """Calculate precision, recall, and mAP across multiple IoU thresholds."""
     precisions = []
     recalls = []
     aps = []
@@ -74,8 +74,12 @@ def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
         recalls.append(recall)
         aps.append(ap)
 
-    # Return averages across IoU thresholds
-    return np.mean(precisions), np.mean(recalls), np.mean(aps)
+    # For mAP@50 and mAP@[50-95]
+    mAP50 = aps[0]  # The first threshold corresponds to IoU=0.50
+    mAP50_95 = np.mean(aps)
+
+    return np.mean(precisions), np.mean(recalls), mAP50, mAP50_95
+
 
 def calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold=0.5):
     """Calculate precision, recall, and AP for a single IoU threshold."""
@@ -122,6 +126,7 @@ def calculate_single_threshold(gt_boxes, pred_boxes, pred_scores, iou_threshold=
 
     return precision, recall, ap
 
+
 def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
     """Run inference on a dataset and calculate metrics."""
     # Load the model
@@ -132,16 +137,15 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
 
     all_precisions = []
     all_recalls = []
-    all_aps = []
+    all_mAP50 = []
+    all_mAP50_95 = []
     total_time = 0.0
 
     images = [f for f in os.listdir(os.path.join(dataset_path, "images")) if f.endswith(('.jpg', '.jpeg', '.png'))]
-    
-    counter = 0
     total_images = len(images)
 
     # Process each image
-    for image_file in images:
+    for idx, image_file in enumerate(images):
         image_path = os.path.join(dataset_path, "images", image_file)
         annotation_path = os.path.join(dataset_path, "labels", image_file.replace(".jpg", ".txt"))
 
@@ -158,22 +162,24 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
         total_time += inference_time
 
         # Calculate metrics across IoU thresholds
-        precision, recall, ap = calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds)
+        precision, recall, mAP50, mAP50_95 = calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds)
         all_precisions.append(precision)
         all_recalls.append(recall)
-        all_aps.append(ap)
-        
-        counter += 1
-        if (counter % 100 == 0 or counter == total_images):
-            print(f"{counter} Images have been processed [{100 * counter / total_images:.1f}%]")
+        all_mAP50.append(mAP50)
+        all_mAP50_95.append(mAP50_95)
 
-    # Calculate mean metrics
+        if (idx + 1) % 100 == 0 or (idx + 1) == total_images:
+            print(f"Processed {idx + 1}/{total_images} images [{100 * (idx + 1) / total_images:.1f}%]")
+
+    # Calculate overall metrics
     mean_precision = np.mean(all_precisions)
     mean_recall = np.mean(all_recalls)
-    map50_95 = np.mean(all_aps)
+    mean_mAP50 = np.mean(all_mAP50)
+    mean_mAP50_95 = np.mean(all_mAP50_95)
 
-    print(f"Precision: {mean_precision:.4f}, Recall: {mean_recall:.4f}, mAP@[50-95]: {map50_95:.4f}")
-    print(f"Average Inference Time: {1000 * total_time / len(all_precisions):.1f} milliseconds per image")
+    print(f"Box(P): {mean_precision:.4f}, Box(R): {mean_recall:.4f}, Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
+    print(f"Average Inference Time: {1000 * total_time / total_images:.1f} milliseconds per image")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run YOLO inference and evaluate metrics on a dataset")
@@ -184,4 +190,3 @@ if __name__ == "__main__":
 
     iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
     process_dataset(args.dataset, args.model, args.labels, iou_thresholds)
-
