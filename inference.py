@@ -122,8 +122,11 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
     all_aps = []
     total_time = 0.0
 
+    images = os.listdir(os.path.join(dataset_path, "images"))
+    
+    counter = 0
     # Process each image
-    for image_file in os.listdir(os.path.join(dataset_path, "images")):
+    for image_file in images:
         image_path = os.path.join(dataset_path, "images", image_file)
         annotation_path = os.path.join(dataset_path, "labels", image_file.replace(".jpg", ".txt"))
 
@@ -144,6 +147,10 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
         all_precisions.append(precision)
         all_recalls.append(recall)
         all_aps.append(ap)
+        
+        counter += 1
+        if (counter % 100 == 0):
+            print(f"{counter} Imgaes has been processed [{counter/len(images)}]")
 
     # Calculate mean metrics
     mean_precision = np.mean(all_precisions)
@@ -151,7 +158,7 @@ def process_dataset(dataset_path, model_path, labels_path, iou_threshold=0.5):
     map50_95 = np.mean(all_aps)
 
     print(f"Precision: {mean_precision:.4f}, Recall: {mean_recall:.4f}, mAP@[50-95]: {map50_95:.4f}")
-    print(f"Average Inference Time: {total_time / len(all_precisions):.4f} seconds per image")
+    print(f"Average Inference Time: {1000 * total_time / len(all_precisions):.4f} seconds per image")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run YOLO inference and evaluate metrics on a dataset")
