@@ -7,7 +7,7 @@ from pycoral.utils import dataset
 from pycoral.adapters import common
 from pycoral.adapters import detect
 from PIL import Image
-from sklearn.metrics import average_precision_score
+from sklearn.metrics import precision_score, recall_score, average_precision_score
 
 
 def load_annotations(annotation_path, image_shape):
@@ -61,73 +61,60 @@ def compute_iou_matrix(gt_boxes, pred_boxes):
     iou_matrix = np.zeros((len(gt_boxes), len(pred_boxes)))
     for i, gt in enumerate(gt_boxes):
         for j, pred in enumerate(pred_boxes):
-            iou_matrix[i, j] = compute_iou(gt, pred["bbox"])
+            iou_matrix[i, j] = compute_iou(gt[1:], pred["bbox"])
     return iou_matrix
 
 
-def calculate_tp_fp(gt_boxes, pred_boxes, iou_threshold=0.5):
-    """Calculate True Positives (TP) and False Positives (FP) for a fixed IoU threshold."""
-    tp = 0
-    fp = 0
-    assigned_gt = set()  # Track matched ground truths
-
-    for pred in pred_boxes:
-        matched = False
-        for i, gt in enumerate(gt_boxes):
-            if i in assigned_gt:
-                continue  # Skip already matched ground truths
-            iou = compute_iou(gt[1:], pred["bbox"])
-            if iou >= iou_threshold:
-                matched = True
-                assigned_gt.add(i)
-                break
-
-        if matched:
-            tp += 1
-        else:
-            fp += 1
-
-    return tp, fp
-
-
-def calculate_mAP(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
-    """Calculate mAP across multiple IoU thresholds."""
+def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
+    """Calculate precision, recall, and mAP across multiple IoU thresholds."""
+    precisions = []
+    recalls = []
     aps = []
 
     for iou_threshold in iou_thresholds:
-        # Match predictions to ground truths
-        tp = []
-        y_true = []
-        y_score = []
+        tp, fp = 0, 0
         assigned_gt = set()
 
-        for j, pred in enumerate(pred_boxes):
+        # Match predictions to ground truths
+        y_true = []
+        y_score = []
+        for pred in pred_boxes:
             matched = False
             for i, gt in enumerate(gt_boxes):
                 if i in assigned_gt:
-                    continue  # Skip already matched ground truths
-                iou = compute_iou(gt[1:], pred["bbox"])
-                if iou >= iou_threshold:
-                    matched = True
-                    assigned_gt.add(i)
-                    break
+                    continue
+                if pred["id"] == gt[0]:  # Ensure class match
+                    iou = compute_iou(gt[1:], pred["bbox"])
+                    if iou >= iou_threshold:
+                        matched = True
+                        assigned_gt.add(i)
+                        break
 
             y_true.append(1 if matched else 0)
-            y_score.append(pred_scores[j])
-            tp.append(matched)
+            y_score.append(pred["score"])
+            if matched:
+                tp += 1
+            else:
+                fp += 1
 
         # Add unmatched ground truths as false negatives
         y_true.extend([1] * (len(gt_boxes) - len(assigned_gt)))
         y_score.extend([0] * (len(gt_boxes) - len(assigned_gt)))
 
-        # Calculate AP for the current IoU threshold
-        ap = average_precision_score(y_true, y_score)
+        # Calculate precision, recall, and AP
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / len(gt_boxes) if len(gt_boxes) > 0 else 0
+        ap = average_precision_score(y_true, y_score) if y_true else 0
+
+        precisions.append(precision)
+        recalls.append(recall)
         aps.append(ap)
 
     # Calculate mAP
     mAP50 = aps[0]  # IoU = 0.5
     mAP50_95 = np.mean(aps)
-    return mAP50, mAP50_95
+
+    return max(precisions), max(recalls), mAP50, mAP50_95
 
 
 def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
@@ -138,11 +125,11 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
 
     label_map = dataset.read_label_file(labels_path)
 
-    total_tp = 0
-    total_fp = 0
-    total_time = 0.0
+    max_precision = 0
+    max_recall = 0
     all_mAP50 = []
     all_mAP50_95 = []
+    total_time = 0.0
 
     images = [f for f in os.listdir(os.path.join(dataset_path, "images")) if f.endswith(('.jpg', '.jpeg', '.png'))]
     total_images = len(images)
@@ -166,26 +153,22 @@ def process_dataset(dataset_path, model_path, labels_path, iou_thresholds):
 
         pred_scores = [pred["score"] for pred in pred_boxes]
 
-        # Calculate True Positives and False Positives
-        tp, fp = calculate_tp_fp(gt_boxes, pred_boxes, iou_threshold=0.75)
-        total_tp += tp
-        total_fp += fp
-
-        # Calculate mAP
-        mAP50, mAP50_95 = calculate_mAP(gt_boxes, pred_boxes, pred_scores, iou_thresholds)
+        # Calculate metrics
+        precision, recall, mAP50, mAP50_95 = calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds)
+        max_precision = max(max_precision, precision)
+        max_recall = max(max_recall, recall)
         all_mAP50.append(mAP50)
         all_mAP50_95.append(mAP50_95)
 
         if (idx + 1) % 100 == 0 or (idx + 1) == total_images:
             print(f"Processed {idx + 1}/{total_images} images [{100 * (idx + 1) / total_images:.1f}%]")
 
-    # Calculate overall mAP
+    # Calculate overall metrics
     mean_mAP50 = np.mean(all_mAP50)
     mean_mAP50_95 = np.mean(all_mAP50_95)
 
-    print(f"Total True Positives (TP): {total_tp}")
-    print(f"Total False Positives (FP): {total_fp}")
-    print(f"Precision: {total_tp/(total_tp+total_fp)}")
+    print(f"Max Precision: {max_precision:.4f}")
+    print(f"Max Recall: {max_recall:.4f}")
     print(f"Box(mAP@50): {mean_mAP50:.4f}, Box(mAP@[50-95]): {mean_mAP50_95:.4f}")
     print(f"Average Inference Time: {1000 * total_time / total_images:.1f} milliseconds per image")
 
