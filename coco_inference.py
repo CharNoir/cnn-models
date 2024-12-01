@@ -137,7 +137,7 @@ def process_dataset(model_path, labels_path, images_path, annotations_path, iou_
     # Process each image
     for idx, image_file in enumerate(images):
         image_path = os.path.join(images_path, image_file)
-        annotation_path = os.path.join(annotations_path, "labels", image_file.replace(".jpg", ".txt"))
+        annotation_path = os.path.join(annotations_path, image_file.replace(".jpg", ".txt"))
 
         # Load and preprocess the image
         image = Image.open(image_path).convert("RGB")
