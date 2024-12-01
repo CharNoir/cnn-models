@@ -68,7 +68,7 @@ def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
     return max(precisions), max(recalls), mAP50, mAP50_95
 
 
-def run_inference(dataset_path, model_path, labels_path, min_conf, iou_thresholds):
+def run_inference(dataset_path, model_path, labels_path, min_conf=0.5):
     """Run inference on images and calculate metrics."""
     interpreter = edgetpu.make_interpreter(model_path)
     interpreter.allocate_tensors()
@@ -76,10 +76,11 @@ def run_inference(dataset_path, model_path, labels_path, min_conf, iou_threshold
     labels = dataset.read_label_file(labels_path)
 
     image_dir = os.path.join(dataset_path, "images")
-    annotation_dir = os.path.join(dataset_path, "annotations")
+    annotation_dir = os.path.join(dataset_path, "labels")
 
     images = [f for f in os.listdir(image_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
 
+    iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
     total_metrics = []
     total_inference_time = 0.0
 
@@ -141,11 +142,9 @@ def run_inference(dataset_path, model_path, labels_path, min_conf, iou_threshold
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run PyCoral inference and compute metrics.")
-    parser.add_argument("--dataset_path", type=str, required=True, help="Path to dataset folder containing images and annotations.")
-    parser.add_argument("--model_path", type=str, required=True, help="Path to .tflite model file.")
-    parser.add_argument("--labels_path", type=str, required=True, help="Path to label file.")
-    parser.add_argument("--min_conf", type=float, default=0.5, help="Minimum confidence threshold for detections.")
+    parser.add_argument("--model", type=str, required=True, help="Path to the TFLite model file")
+    parser.add_argument("--labels", type=str, required=True, help="Path to the labels txt file")
+    parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset folder in YOLO format")
     args = parser.parse_args()
 
-    iou_thresholds = np.arange(0.5, 1.0, 0.05)  # IoU thresholds from 0.50 to 0.95
-    run_inference(args.dataset_path, args.model_path, args.labels_path, args.min_conf, iou_thresholds)
+    run_inference(args.dataset, args.model, args.labels)
