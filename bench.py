@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", type=str, required=True, help="Path to the dataset YAML file")
     parser.add_argument("--imgsz", type=int, required=True, help="Image size for validation")
     parser.add_argument("--output", type=str, required=False, default="validation_results.txt", help="Path to the output file")
-    parser.add_argument("--device", type=str, help="Image size for validation")
+    parser.add_argument("--device", type=str, help="Device for validation")
 
     # Parse arguments
     args = parser.parse_args()
