@@ -102,9 +102,9 @@ def calculate_metrics(gt_boxes, pred_boxes, pred_scores, iou_thresholds):
         y_score.extend([0] * (len(gt_boxes) - len(assigned_gt)))
 
         # Calculate precision, recall, and AP
-        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
-        recall = tp / len(gt_boxes) if len(gt_boxes) > 0 else 0
-        ap = average_precision_score(y_true, y_score) if y_true else 0
+        precision = tp / (tp + fp) 
+        recall = tp / len(gt_boxes) 
+        ap = average_precision_score(y_true, y_score)
 
         precisions.append(precision)
         recalls.append(recall)
